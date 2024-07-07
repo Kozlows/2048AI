@@ -1,56 +1,92 @@
 import numpy as np
-import random
 
-class NeuralNetwork(object):
-    def __init__(self, inputAmount, outputAmount):
-        self.inputs = inputAmount
-        self.outputs = outputAmount
+class Network(object): # A Neural Network Model
+    def __init__(self, generateNewData=False, storedLocation="tuningPoints.txt"):
         self.layers = self.initLayers()
+        self.direction = self.initDirections()
+        self.saveLocation = storedLocation
+        if not generateNewData:
+            self.updateLayers()
+        self.updateSave()
     
+    def updateSave(self):
+        with open(self.saveLocation, "w") as f:
+            f.write(f"{self}")
+
+    def updateLayers(self):
+        with open(self.saveLocation, "r") as f:
+            text = "".join(f.readlines())
+
+        text = text.split("\n")
+        layers = [[list() for i in range(2)] for layer in self.layers]
+
+        count = -1
+        for line in text:
+            if line[0].isdigit() or line[0] == "-":
+                count += 1
+                nums = [float(n) if n != "0." else float(0) for n in line.strip().split()]
+                layers[count // 2][count % 2] = nums
+            else:
+                nums = [float(n) if n != "0." else 0 for n in line.strip().split()]
+                if type(layers[count // 2][count % 2][0]) == list:
+                    layers[count // 2][count % 2].append(nums)
+                else:
+                    layers[count // 2][count % 2] = [layers[count // 2][count % 2], nums]
+
+        for i in range(len(self.layers)):
+            self.layers[i].weights = np.array(layers[i][0])
+            self.layers[i].biases = np.array(layers[i][1])
+
+    def initDirections(self):
+        return {i : c for i, c in enumerate("lurd")}
+
+    def aiDidBadMove(self, score):
+        pass
+
     def initLayers(self):
         layers = list()
-        layers.append(Layer((4), (4)))
-        layers.append(Layer((4), (1))) 
+        layers.append(Layer(4, 4, ActivationReLU()))
+        layers.append(Layer(1, 4, ActivationSoftmax()))
         return layers
-
-    def boardInput(self, board):
-        directions = "lurd"
-        d = {i : c for i, c in enumerate("lurd")}
-        output = board
+    
+    def chooseDirection(self, boardInput):
         for layer in self.layers:
-            output = [node.calculate(output[i]) for i, node in enumerate(layer.nodes)]
-        biggest = np.max(output)
-        return d[output.index(biggest)]
+            boardInput = layer.forward(boardInput)
+        self.latestMove = (self.direction[boardInput.argmax()], boardInput)
+        return self.direction[self.latestMove[0]]
 
+    def __str__(self):
+        return "\n".join([f"{layer}" for layer in self.layers])
 
-class Layer(object):
-    def __init__(self, inputShape, outputShape):
-        self.nodes = self.initNodes(inputShape, outputShape)
+class Layer(object): # A layer model
+    def __init__(self, nInputs, nNeurons, activation): # Number of inputs each neuron will take in, and the number of neurons the layer will have
+        self.activation = activation
+        self.rng = np.random.default_rng()
+        self.weights = 0.1 * self.rng.standard_normal((nInputs, nNeurons))
+        self.biases = np.zeros((1, nNeurons))
+
+    def forward(self, inputs):
+        dotProduct = np.dot(self.weights, inputs)
+        dotProduct += self.biases
+        output = self.activation.forward(dotProduct)
+        return output
     
-    def initNodes(self, inputShape, outputShape):
-        nodes = [Node(inputShape, outputShape) for i in range(4)]
-        return nodes
+    def __str__(self):
+        weights = f"{self.weights}".replace("[", "").replace("]", "").strip()
+        biases = f"{self.biases}".replace("[", "").replace("]", "").strip()
+        return f"{weights}\n{biases}"
 
-class Node(object):
-    def __init__(self, inputShape, outputShape):
-        self.ishape = inputShape
-        self.oshape = outputShape
-        self.weights, self.biases = self.initValues()
-    
-    def randomValue(self):
-        return (random.random() * 2) - 1
+class ActivationReLU(object): # ReLU Activation function, used to make each node non-linear, works well, used for all hidden layers
+    def forward(self, inputs):
+        return np.maximum(0, inputs)
 
-    def initValues(self):
-        weights = list()
-        biases = list()
-        if self.ishape == self.oshape:
-            weights = [[self.randomValue() for i in range(self.ishape)] for j in range(self.oshape)]
-            biases = [self.randomValue() for i in range(self.oshape)]
-        elif self.oshape == 1:
-            weights = [self.randomValue() for i in range(self.ishape)]
-            biases = [self.randomValue()]
+class ActivationSoftmax(object): # Softmax Activation function, used to normalize the output of a network, usually used on the output layer
+    def forward(self, inputs):
+        expValues = np.exp(inputs - np.max(inputs, axis=1, keepdims=True))
+        probabilities = expValues / np.sum(expValues, axis=1, keepdims=True)
+        return probabilities
 
-        return weights, biases
-
-    def calculate(self, inputs):
-        return np.dot(self.weights, inputs) + self.biases
+class Loss(object):
+    def calculate(self, softMaxOutput, expectedOutputIndex):
+        dataLoss = self.forward(softMaxOutput, expectedOutputIndex)
+        return dataLoss

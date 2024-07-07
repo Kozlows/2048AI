@@ -56,7 +56,8 @@ class Game2048(object):
         if newBoard != self.board:
             self.board = newBoard
             self.generateNewNumber()
-                
+        else:
+            self.ai.aiDidBadMove(self.score)
     def initColours(self):
         r = [201,235,234,226,223,191,215,228,228,228,228,228]
         g = [194,229,226,182,156,34,105,208,208,208,208,208]
@@ -144,7 +145,7 @@ class Game2048(object):
                     surface.fill(colour)
                 screen.blit(surface, offset)
 
-            self.move(self.ai.boardInput(self.board))
+            self.move(self.ai.chooseDirection(self.board))
 
             pg.display.flip()
 
